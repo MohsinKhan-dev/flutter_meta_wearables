@@ -1,0 +1,27 @@
+name: flutter_meta_wearables
+description: "Flutter plugin for Meta Wearables Device Access Toolkit (DAT) SDK. Provides device registration, BLE discovery, live video streaming, and photo capture for Ray-Ban Meta smart glasses."
+version: 0.1.0
+homepage: https://github.com/user/flutter_meta_wearables
+
+environment:
+  sdk: ^3.11.0
+  flutter: '>=3.3.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  plugin_platform_interface: ^2.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.meta.wearable.flutter
+        pluginClass: FlutterMetaWearablesPlugin
+      ios:
+        pluginClass: FlutterMetaWearablesPlugin
