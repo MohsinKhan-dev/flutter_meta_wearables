@@ -2,12 +2,15 @@ package com.meta.wearable.flutter
 
 import android.app.Activity
 import android.app.Application
+import android.content.Intent
 import com.meta.wearable.dat.core.Wearables
+import com.meta.wearable.dat.core.types.Permission
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugin.common.PluginRegistry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -44,6 +47,19 @@ class FlutterMetaWearablesPlugin : FlutterPlugin, ActivityAware {
 
     private var registrationJob: Job? = null
     private var devicesJob: Job? = null
+    private var activityBinding: ActivityPluginBinding? = null
+
+    private val permissionContract = Wearables.RequestPermissionContract()
+
+    private val activityResultListener = PluginRegistry.ActivityResultListener { requestCode, resultCode, data ->
+        if (requestCode == WearablesMethodCallHandler.PERMISSION_REQUEST_CODE) {
+            val datResult = permissionContract.parseResult(resultCode, data)
+            methodCallHandler.handlePermissionResult(datResult)
+            true
+        } else {
+            false
+        }
+    }
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         methodCallHandler = WearablesMethodCallHandler(
@@ -54,6 +70,8 @@ class FlutterMetaWearablesPlugin : FlutterPlugin, ActivityAware {
         )
         methodCallHandler.application = binding.applicationContext as? Application
         methodCallHandler.textureRegistry = binding.textureRegistry
+        methodCallHandler.onInitialized = { startFlowCollection() }
+        methodCallHandler.permissionContract = permissionContract
 
         methodChannel = MethodChannel(binding.binaryMessenger, METHOD_CHANNEL)
         methodChannel.setMethodCallHandler(methodCallHandler)
@@ -72,11 +90,10 @@ class FlutterMetaWearablesPlugin : FlutterPlugin, ActivityAware {
 
         streamErrorsChannel = EventChannel(binding.binaryMessenger, STREAM_ERRORS_CHANNEL)
         streamErrorsChannel.setStreamHandler(streamErrorsHandler)
-
-        startFlowCollection()
     }
 
-    private fun startFlowCollection() {
+    fun startFlowCollection() {
+        if (registrationJob != null) return
         registrationJob = pluginScope.launch(Dispatchers.Main) {
             Wearables.registrationState.collect { state ->
                 registrationStateHandler.eventSink?.success(
@@ -111,17 +128,25 @@ class FlutterMetaWearablesPlugin : FlutterPlugin, ActivityAware {
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
         methodCallHandler.activity = binding.activity
+        activityBinding = binding
+        binding.addActivityResultListener(activityResultListener)
     }
 
     override fun onDetachedFromActivityForConfigChanges() {
         methodCallHandler.activity = null
+        activityBinding?.removeActivityResultListener(activityResultListener)
+        activityBinding = null
     }
 
     override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
         methodCallHandler.activity = binding.activity
+        activityBinding = binding
+        binding.addActivityResultListener(activityResultListener)
     }
 
     override fun onDetachedFromActivity() {
         methodCallHandler.activity = null
+        activityBinding?.removeActivityResultListener(activityResultListener)
+        activityBinding = null
     }
 }

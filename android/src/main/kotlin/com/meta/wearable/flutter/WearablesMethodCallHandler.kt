@@ -4,7 +4,10 @@ import android.app.Activity
 import android.app.Application
 import com.meta.wearable.dat.camera.types.VideoQuality
 import com.meta.wearable.dat.core.Wearables
+import com.meta.wearable.dat.core.types.DatResult
 import com.meta.wearable.dat.core.types.Permission
+import com.meta.wearable.dat.core.types.PermissionError
+import com.meta.wearable.dat.core.types.PermissionStatus
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.view.TextureRegistry
@@ -19,12 +22,19 @@ class WearablesMethodCallHandler(
     private val streamErrorsHandler: WearablesStreamHandlers.StreamErrorsHandler
 ) : MethodChannel.MethodCallHandler {
 
+    companion object {
+        const val PERMISSION_REQUEST_CODE = 48291
+    }
+
     var activity: Activity? = null
     var application: Application? = null
     var textureRegistry: TextureRegistry? = null
+    var onInitialized: (() -> Unit)? = null
+    var permissionContract: Wearables.RequestPermissionContract? = null
 
     private var streamSessionManager: StreamSessionManager? = null
     private var mockDeviceKitHandler: MockDeviceKitHandler? = null
+    private var pendingPermissionResult: MethodChannel.Result? = null
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
@@ -75,6 +85,7 @@ class WearablesMethodCallHandler(
         }
         try {
             Wearables.initialize(app)
+            onInitialized?.invoke()
             result.success(null)
         } catch (e: Exception) {
             result.error("INIT_ERROR", "Failed to initialize: ${e.message}", null)
@@ -111,27 +122,70 @@ class WearablesMethodCallHandler(
 
     private fun handleCheckPermissionStatus(call: MethodCall, result: MethodChannel.Result) {
         val permissionName = call.argument<String>("permission") ?: "camera"
-        try {
-            val permission = when (permissionName) {
-                "camera" -> Permission.CAMERA
-                else -> Permission.CAMERA
+        scope.launch(Dispatchers.Main) {
+            try {
+                val permission = when (permissionName) {
+                    "camera" -> Permission.CAMERA
+                    else -> Permission.CAMERA
+                }
+                val checkResult = Wearables.checkPermissionStatus(permission)
+                checkResult.onSuccess { status ->
+                    result.success(Converters.permissionStatusToString(status))
+                }
+                checkResult.onFailure { error, _ ->
+                    result.error("PERMISSION_ERROR", "Permission check failed: ${error.description}", null)
+                }
+            } catch (e: Exception) {
+                result.error("PERMISSION_ERROR", "Failed to check permission: ${e.message}", null)
             }
-            val checkResult = Wearables.checkPermissionStatus(permission)
-            checkResult.onSuccess { status ->
-                result.success(Converters.permissionStatusToString(status))
-            }
-            checkResult.onFailure { error, _ ->
-                result.error("PERMISSION_ERROR", "Permission check failed: ${error.description}", null)
-            }
-        } catch (e: Exception) {
-            result.error("PERMISSION_ERROR", "Failed to check permission: ${e.message}", null)
         }
     }
 
     private fun handleRequestPermission(call: MethodCall, result: MethodChannel.Result) {
-        // Permission requesting on Android uses ActivityResultContract
-        // The plugin delegates this to the activity-level permission launcher
-        result.error("NOT_SUPPORTED", "Use the native permission contract flow on Android", null)
+        val act = activity
+        val contract = permissionContract
+        if (act == null || contract == null) {
+            result.error("NO_ACTIVITY", "Activity not available for permission request", null)
+            return
+        }
+        if (pendingPermissionResult != null) {
+            result.error("IN_PROGRESS", "A permission request is already in progress", null)
+            return
+        }
+        val permissionName = call.argument<String>("permission") ?: "camera"
+        val permission = when (permissionName) {
+            "camera" -> Permission.CAMERA
+            else -> Permission.CAMERA
+        }
+
+        // Check if the contract can resolve synchronously (permission already granted/denied)
+        val syncResult = contract.getSynchronousResult(act, permission)
+        if (syncResult != null) {
+            val datResult = syncResult.value
+            datResult.onSuccess { status ->
+                result.success(Converters.permissionStatusToString(status))
+            }
+            datResult.onFailure { error, _ ->
+                result.error("PERMISSION_ERROR", "Permission request failed: ${error.description}", null)
+            }
+            return
+        }
+
+        // Need to launch the Meta AI app for permission - use startActivityForResult
+        pendingPermissionResult = result
+        val intent = contract.createIntent(act, permission)
+        act.startActivityForResult(intent, PERMISSION_REQUEST_CODE)
+    }
+
+    fun handlePermissionResult(datResult: DatResult<PermissionStatus, PermissionError>) {
+        val result = pendingPermissionResult ?: return
+        pendingPermissionResult = null
+        datResult.onSuccess { status ->
+            result.success(Converters.permissionStatusToString(status))
+        }
+        datResult.onFailure { error, _ ->
+            result.error("PERMISSION_ERROR", "Permission request failed: ${error.description}", null)
+        }
     }
 
     private fun handleUrl(call: MethodCall, result: MethodChannel.Result) {

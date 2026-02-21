@@ -28,10 +28,10 @@ object Converters {
         return when (state) {
             StreamSessionState.STOPPED -> "stopped"
             StreamSessionState.STARTING -> "starting"
-            StreamSessionState.WAITING_FOR_DEVICE -> "waitingForDevice"
+            StreamSessionState.STARTED -> "started"
             StreamSessionState.STREAMING -> "streaming"
-            StreamSessionState.PAUSED -> "paused"
             StreamSessionState.STOPPING -> "stopping"
+            StreamSessionState.CLOSED -> "closed"
         }
     }
 

@@ -3,11 +3,12 @@ package com.meta.wearable.flutter
 import android.app.Application
 import android.net.Uri
 import com.meta.wearable.dat.mockdevice.MockDeviceKit
+import com.meta.wearable.dat.mockdevice.api.MockDeviceKitInterface
 import com.meta.wearable.dat.mockdevice.api.MockRaybanMeta
 import io.flutter.plugin.common.MethodChannel
 
 class MockDeviceKitHandler(private val application: Application) {
-    private val mockDeviceKit: MockDeviceKit by lazy {
+    private val mockDeviceKit: MockDeviceKitInterface by lazy {
         MockDeviceKit.getInstance(application.applicationContext)
     }
     private val pairedDevices = mutableMapOf<String, MockRaybanMeta>()

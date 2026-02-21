@@ -2,6 +2,21 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        maven {
+            url = uri("https://maven.pkg.github.com/facebook/meta-wearables-dat-android")
+            credentials {
+                username = ""
+                password = System.getenv("GITHUB_TOKEN")
+                    ?: run {
+                        val properties = java.util.Properties()
+                        val localPropertiesFile = rootProject.file("local.properties")
+                        if (localPropertiesFile.exists()) {
+                            localPropertiesFile.inputStream().use { properties.load(it) }
+                        }
+                        properties.getProperty("github_token", "")
+                    }
+            }
+        }
     }
 }
 

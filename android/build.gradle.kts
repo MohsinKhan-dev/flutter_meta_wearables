@@ -90,6 +90,7 @@ dependencies {
     implementation("com.meta.wearable:mwdat-camera:0.4.0")
     implementation("com.meta.wearable:mwdat-mockdevice:0.4.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation("androidx.emoji2:emoji2:1.4.0")
     testImplementation("org.jetbrains.kotlin:kotlin-test")
     testImplementation("org.mockito:mockito-core:5.0.0")
 }

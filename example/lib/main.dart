@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_meta_wearables/flutter_meta_wearables.dart';
+import 'package:permission_handler/permission_handler.dart' as ph;
 
 void main() {
   runApp(const MetaWearablesExampleApp());
@@ -50,6 +51,14 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _initialize() async {
     try {
+      // Request Android permissions (Bluetooth required on Android 12+, Camera for video streaming)
+      await [
+        ph.Permission.bluetoothConnect,
+        ph.Permission.bluetoothScan,
+        ph.Permission.bluetoothAdvertise,
+        ph.Permission.camera,
+      ].request();
+
       await _wearables.initialize();
       setState(() {
         _initialized = true;
@@ -196,18 +205,25 @@ class _StreamingPageState extends State<StreamingPage> {
 
   Future<void> _startStreaming() async {
     try {
-      // Check/request permission first
-      final permStatus = await _wearables.checkPermissionStatus(
-        WearablePermission.camera,
-      );
-      if (permStatus != PermissionStatus.granted) {
-        final reqStatus = await _wearables.requestPermission(
+      // Check camera permission, request if not granted
+      try {
+        var permStatus = await _wearables.checkPermissionStatus(
           WearablePermission.camera,
         );
-        if (reqStatus != PermissionStatus.granted) {
-          setState(() => _error = 'Camera permission denied');
-          return;
+        if (permStatus != PermissionStatus.granted) {
+          // Request permission via Meta AI app
+          permStatus = await _wearables.requestPermission(
+            WearablePermission.camera,
+          );
+          if (permStatus != PermissionStatus.granted) {
+            setState(() => _error =
+                'Camera permission denied. Please grant camera access when prompted by the Meta AI app.');
+            return;
+          }
         }
+      } catch (e) {
+        // Permission check/request may fail if device is still connecting - proceed to stream
+        debugPrint('Permission check failed (proceeding): $e');
       }
 
       final session = await _wearables.startStreamSession();
